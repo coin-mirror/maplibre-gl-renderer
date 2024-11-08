@@ -6,9 +6,9 @@ async function startServer() {
   const server = new MapScreenshotServer(
     "map.html",
     3000,
-    !process.env.RENDERER_COUNT || isNaN(parseInt(process.env.RENDERER_COUNT))
+    !process.env.WORKER_COUNT || isNaN(parseInt(process.env.WORKER_COUNT))
       ? cpus().length
-      : parseInt(process.env.RENDERER_COUNT),
+      : parseInt(process.env.WORKER_COUNT),
   );
 
   process.on("SIGINT", async () => {
