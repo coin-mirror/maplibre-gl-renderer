@@ -24,6 +24,41 @@ docker run --rm ghcr.io/coin-mirror/maplibre-gl-renderer:v0.1.0
 
 Please read the License.
 
+## API
+
+### POST /render
+
+Renders a map view according to the provided style and viewport settings.
+
+**Request Body in JSON format:**
+
+- `width`: Width (10-6000px, default: 1920)
+- `height`: Height (10-4000px, default: 1080)
+- `ratio`: Device scale factor (1-8, default: 1)
+- `center`: [longitude, latitude] (-180/180, -90/90)
+- `zoom`: Zoom level (0-22)
+- `pitch`: Tilt angle (0-85°, default: 0)
+- `bearing`: Rotation (-180-180°, default: 0)
+- `format`: "png", "jpeg" or "webp" (default: "webp")
+- `style`: MapLibre Style Spec object
+
+**Example:**
+
+```json
+{
+  "height": 512,
+  "width": 1024,
+  "center": [7.65, 45.02],
+  "zoom": 5.0613,
+  "bearing": 0,
+  "pitch": 0,
+  "ratio": 1.7,
+  "style": {
+    // Maplibre Style Spec
+  }
+}
+```
+
 ## Development
 
 The project requires [Bun](https://bun.sh) for dependency management and runtime.
