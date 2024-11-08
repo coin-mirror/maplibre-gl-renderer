@@ -3,7 +3,7 @@ FROM oven/bun:1 AS builder
 WORKDIR /app
 COPY package.json bun.lockb tsconfig.json map.html ./
 
-RUN bun install --frozen-lockfile
+RUN PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium bun install --frozen-lockfile
 
 COPY ./src/ ./src/
 
