@@ -9,6 +9,8 @@ COPY ./src/ ./src/
 
 FROM oven/bun:1-debian
 
+LABEL org.opencontainers.image.source="https://github.com/coin-mirror/maplibre-gl-renderer"
+
 WORKDIR /app
 
 # Install Chromium and dependencies (for puppeteer)
