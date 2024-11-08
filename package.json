@@ -1,0 +1,23 @@
+{
+  "name": "map-render",
+  "module": "src/index.ts",
+  "type": "module",
+  "scripts": {
+    "start": "bun run ./src/index.ts",
+    "dev": "bun run --watch src/index.ts",
+    "build": "bun build ./src/index.ts --outfile ./dist/index.mjs --target=node --format=esm --platform=node --sourcemap"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "@types/express": "^5.0.0"
+  },
+  "peerDependencies": {
+    "typescript": "^5.0.0"
+  },
+  "dependencies": {
+    "express": "^4.21.1",
+    "p-queue": "^8.0.1",
+    "puppeteer": "^23.7.0",
+    "zod": "^3.23.8"
+  }
+}
