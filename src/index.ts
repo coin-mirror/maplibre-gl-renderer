@@ -5,7 +5,7 @@ import process from "process";
 async function startServer() {
   const server = new MapScreenshotServer(
     "map.html",
-    3000,
+    process.env.PORT ? parseInt(process.env.PORT) : 3000,
     !process.env.WORKER_COUNT || isNaN(parseInt(process.env.WORKER_COUNT))
       ? cpus().length
       : parseInt(process.env.WORKER_COUNT),
