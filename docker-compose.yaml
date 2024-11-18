@@ -1,3 +1,6 @@
+# Notice: This docker-compose.yaml file is for development purposes.
+# It only supports Linux!
+
 version: "3.8"
 
 services:
