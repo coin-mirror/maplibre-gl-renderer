@@ -1,13 +1,21 @@
 <!DOCTYPE html>
 <html>
+
 <head>
     <link href='https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css' rel='stylesheet' />
     <script src='https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js'></script>
     <style>
-        body { margin: 0; }
-        #map { width: 100vw; height: 100vh; }
+        body {
+            margin: 0;
+        }
+
+        #map {
+            width: 100vw;
+            height: 100vh;
+        }
     </style>
 </head>
+
 <body>
     <div id="map"></div>
     <script>
@@ -18,8 +26,10 @@
             center: [0, 0],
             zoom: 1,
             attributionControl: false,
+            interactive: false,
         });
         window.map = map;
     </script>
 </body>
+
 </html>
