@@ -129,7 +129,7 @@ class MapScreenshotServer {
             error: "Image Generation failed",
             message:
               error instanceof Error
-                ? JSON.parse(error.message)
+                ? error.message
                 : String(error),
           });
         }
