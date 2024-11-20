@@ -7,6 +7,9 @@ RUN PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true PUPPETEER_EXECUTABLE_PATH=/usr/bin/chr
 
 COPY ./src/ ./src/
 
+# Will create dist folder
+RUN bun run build
+
 FROM oven/bun:1-debian
 
 LABEL org.opencontainers.image.source="https://github.com/coin-mirror/maplibre-gl-renderer"
@@ -41,9 +44,8 @@ RUN apt-get update && apt-get install -y \
 RUN useradd -m -u 1111 -s /bin/bash appuser \
   && chown -R appuser:appuser /app
 
-COPY --from=builder --chown=appuser:appuser /app/src /app/src
-COPY --from=builder --chown=appuser:appuser /app/node_modules /app/node_modules
-COPY --from=builder --chown=appuser:appuser  /app/package.json /app/tsconfig.json /app/map.html /app/
+COPY --from=builder --chown=appuser:appuser /app/dist /app/dist
+COPY --from=builder --chown=appuser:appuser  /app/package.json /app/map.html /app/
 
 ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true \
   PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium \

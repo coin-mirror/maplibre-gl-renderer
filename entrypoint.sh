@@ -9,4 +9,4 @@ until xdpyinfo -display :99 >/dev/null 2>&1; do
     sleep 1
 done
 
-exec bun run src/index.ts
+exec bun run start

@@ -3,9 +3,9 @@
   "module": "src/index.ts",
   "type": "module",
   "scripts": {
-    "start": "bun run ./src/index.ts",
+    "start": "bun ./dist/index.cjs",
     "dev": "WORKER_COUNT=1 bun run --watch src/index.ts",
-    "build": "bun build ./src/index.ts --outfile ./dist/index.mjs --target=node --format=esm --platform=node --sourcemap"
+    "build": "bun build ./src/index.ts --outfile ./dist/index.cjs --target=bun"
   },
   "devDependencies": {
     "@types/bun": "latest",
