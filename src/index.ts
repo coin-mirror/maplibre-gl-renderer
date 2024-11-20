@@ -14,8 +14,16 @@ async function startServer() {
   process.on("SIGINT", async () => {
     console.log("Server will be stopped...");
     await server.stop();
-    console.log("Tschau!");
     process.exit(0);
+  });
+  process.on("SIGTERM", async () => {
+    console.log("Server will be stopped...");
+    await server.stop();
+    process.exit(0);
+  });
+  process.on("SIGKILL", () => {
+    console.warn("Subprocesses may still running!");
+    process.exit(1);
   });
 
   try {
