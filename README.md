@@ -17,7 +17,7 @@ Internally, we use some rendering workers and a queueing system. Each worker can
 You can run the container with (Supported Platforms are x64 and ARM64):
 
 ```bash
-docker run --rm ghcr.io/coin-mirror/maplibre-gl-renderer:v0.1.0
+docker run --rm ghcr.io/coin-mirror/maplibre-gl-renderer:v0.1.2
 ```
 
 > Please note, that it may be required to mount a GPU to the container.
@@ -34,12 +34,14 @@ Renders a map view according to the provided style and viewport settings.
 
 - `width`: Width (10-6000px, default: 1920)
 - `height`: Height (10-4000px, default: 1080)
-- `ratio`: Device scale factor (1-8, default: 1)
+- `ratio`: Device scale factor (0-8, default: 1, zero will fallback to 1!)
 - `center`: [longitude, latitude] (-180/180, -90/90)
 - `zoom`: Zoom level (0-22)
 - `pitch`: Tilt angle (0-85°, default: 0)
-- `bearing`: Rotation (-180-180°, default: 0)
+- `bearing`: Normalized Rotation (-180-180°, default: 0)
 - `format`: "png", "jpeg" or "webp" (default: "webp")
+- `quality`: Quality of picture, ignored for "png" format (0-100, default: 100)
+- `optimize`: Optimizes processing for speed, quality-loss (!) (default: false)
 - `style`: MapLibre Style Spec object
 
 **Example:**
@@ -58,6 +60,14 @@ Renders a map view according to the provided style and viewport settings.
   }
 }
 ```
+
+**Explaination for `ratio` property:**
+
+The `ratio` refers always to the pixel-density ratio using to render the image. Internally, we are using the [window.devicePixelRatio](https://developer.mozilla.org/en-US/docs/Web/API/Window/devicePixelRatio) for scaling along.
+
+Unlike changing the `height` and `width` values (which always results in a different viewport of the map), the `ratio` keeps the viewport but scales the image.
+
+For example, using a `ratio` of `2` would double a requested picture size from 512x512 to 1024x1024 (or 4-times the pixels). You can also downscale by using a value between `0` and `1`. That would mean, a `ratio` of `0.5` would halfen a requested picture size from 512x512 to 256x256.
 
 ## Development
 

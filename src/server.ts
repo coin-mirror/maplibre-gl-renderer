@@ -19,12 +19,14 @@ const StyleSchema = z
 const RequestSchema = z.object({
   width: z.number().int().min(10).max(6000).default(1920).optional(),
   height: z.number().int().min(10).max(4000).default(1080).optional(),
-  ratio: z.number().min(1).max(8).default(1).optional(),
+  ratio: z.number().min(0).max(8).default(1).optional(),
   center: z.tuple([z.number().min(-180).max(180), z.number().min(-90).max(90)]),
   zoom: z.number().min(0).max(22),
   pitch: z.number().min(0).max(85).default(0).optional(),
   bearing: z.number().min(-180).max(180).default(0).optional(),
   format: z.enum(["png", "jpeg", "webp"]).default("webp").optional(),
+  quality: z.number().min(0).max(100).default(100).optional(),
+  optimize: z.boolean().default(false).optional(),
   style: StyleSchema,
 });
 
@@ -127,10 +129,7 @@ class MapScreenshotServer {
           console.error("Image Generation failed:", error);
           res.status(500).json({
             error: "Image Generation failed",
-            message:
-              error instanceof Error
-                ? error.message
-                : String(error),
+            message: error instanceof Error ? error.message : String(error),
           });
         }
       },
@@ -188,9 +187,11 @@ class MapScreenshotServer {
 
       const screenshot = await renderer.takeScreenshot({
         type: task.body.format || "webp",
-        fullPage: true,
-        quality: task.body.format === "png" ? undefined : 100,
+        quality:
+          task.body.format === "png" ? undefined : task.body.quality ?? 100,
         encoding: "binary",
+        omitBackground: !task.body.optimize && task.body.format !== "jpeg",
+        optimizeForSpeed: !!task.body.optimize,
       });
 
       task.resolve(screenshot);
