@@ -227,16 +227,11 @@ class WebMaplibreGLRenderer {
 
     await this.page.setViewport(newViewport);
 
-    // Wait until the map has adjusted to the new size
-    await this.page.evaluate(() => {
+    // Trigger resize event!
+    this.page.evaluate(() => {
       // @ts-ignore
       const map = window.map;
-      if (map) {
-        map.resize();
-        return new Promise((resolve) => {
-          map.once("idle", resolve);
-        });
-      }
+      if (map) map.resize();
     });
   }
 
