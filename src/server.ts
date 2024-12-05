@@ -196,19 +196,26 @@ class MapScreenshotServer {
 
       task.resolve(screenshot);
     } catch (error) {
-      task.reject(error);
+      console.error(`Error in renderer ${rendererIndex}:`, error);
 
+      const errorMessage =
+        error instanceof Error ? error.message : String(error);
       if (
-        error instanceof Error &&
-        (error.message.includes("disconnected") ||
-          error.message.includes("crash"))
+        errorMessage.includes("disconnected") ||
+        errorMessage.includes("crash") ||
+        errorMessage.includes("Timeout") ||
+        errorMessage.includes("detached")
       ) {
         console.error(
           `Critical error in renderer ${rendererIndex}... Cleaning up`,
         );
         await this.renderers[rendererIndex]?.cleanup();
         this.renderers[rendererIndex] = null;
+
+        return task.reject(new Error("Critical error in renderer"));
       }
+
+      task.reject(error);
     }
   }
 
