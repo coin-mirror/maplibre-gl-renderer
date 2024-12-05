@@ -17,7 +17,7 @@ Internally, we use some rendering workers and a queueing system. Each worker can
 You can run the container with (Supported Platforms are x64 and ARM64):
 
 ```bash
-docker run --rm ghcr.io/coin-mirror/maplibre-gl-renderer:v0.1.2
+docker run --rm ghcr.io/coin-mirror/maplibre-gl-renderer:v0.1.5
 ```
 
 > Please note, that it may be required to mount a GPU to the container.
