@@ -7,7 +7,10 @@ import PQueue from "p-queue";
 const StyleSchema = z
   .object({
     version: z.number(),
-    sprite: z.string().optional(),
+    sprite: z
+      .string()
+      .or(z.object({ id: z.string(), url: z.string() }).array())
+      .optional(),
     light: z.object({ color: z.string() }).optional(),
     glyphs: z.string().optional(),
     sources: z.record(z.any()),
