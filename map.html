@@ -2,8 +2,8 @@
 <html>
 
 <head>
-    <link href='https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css' rel='stylesheet' />
-    <script src='https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js'></script>
+    <link href='https://unpkg.com/maplibre-gl@5.1.0/dist/maplibre-gl.css' rel='stylesheet' />
+    <script src='https://unpkg.com/maplibre-gl@5.1.0/dist/maplibre-gl.js'></script>
     <style>
         body {
             margin: 0;
@@ -28,12 +28,23 @@
                 sources: {},
                 layers: []
             },
+            maxCanvasSize: [6000, 4000],
             center: [0, 0],
             zoom: 0,
             attributionControl: false,
             interactive: false,
             fadeDuration: 0,
             bearingSnap: 0,
+            canvasContextAttributes: {
+                preserveDrawingBuffer: true,
+                antialias: true,
+            },
+        });
+        map.setPadding({
+            top: 0,
+            bottom: 0,
+            left: 0,
+            right: 0,
         });
         window.map = map;
     </script>
