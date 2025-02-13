@@ -4,7 +4,7 @@
   "type": "module",
   "scripts": {
     "start": "bun ./dist/index.cjs",
-    "dev": "WORKER_COUNT=1 bun run --watch src/index.ts",
+    "dev": "bun run --watch src/index.ts",
     "build": "bun build ./src/index.ts --outfile ./dist/index.cjs --target=bun"
   },
   "devDependencies": {

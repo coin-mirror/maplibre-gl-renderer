@@ -1,8 +1,8 @@
 # MapLibre Map Renderer
 
-Rendering Maplibre Maps on server-side into pictures (e.g. PNGs) was currently only possible through the [`maplibre-native`](https://github.com/maplibre/maplibre-native) package, with node or c++ bindings. The `maplibre-native` package does NOT support every aspect of the [Maplibre Style Spec](https://maplibre.org/maplibre-style-spec/).
+**The problem:** Rendering Maplibre Maps on server-side into pictures (e.g. PNGs) was currently only possible through the [`maplibre-native`](https://github.com/maplibre/maplibre-native) package, with node or c++ bindings. The `maplibre-native` package does NOT support every aspect of the [Maplibre Style Spec](https://maplibre.org/maplibre-style-spec/).
 
-With this standalone application we introduced the possiblity to render the map with the maplibre-gl (JS) package in a simulated browser (with Puppeteer). This enables us to support the complete Maplibre Style Spec with relative good performance.
+**The solution:** With this standalone application we introduced the possiblity to render the map with the maplibre-gl (JS) package in a simulated browser (with Puppeteer). This enables us to support the complete Maplibre Style Spec with relative good performance.
 
 ## Requirements
 
@@ -17,7 +17,7 @@ Internally, we use some rendering workers and a queueing system. Each worker can
 You can run the container with (Supported Platforms are x64 and ARM64):
 
 ```bash
-docker run --rm ghcr.io/coin-mirror/maplibre-gl-renderer:v0.1.5
+docker run --rm ghcr.io/coin-mirror/maplibre-gl-renderer:v1.0.0
 ```
 
 > Please note, that it may be required to mount a GPU to the container.

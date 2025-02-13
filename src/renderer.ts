@@ -1,18 +1,7 @@
-import puppeteer, {
-  Browser,
-  Page,
-  type Viewport,
-  type ScreenshotOptions,
-  type PuppeteerLifeCycleEvent,
-} from "puppeteer";
+import type { Page } from "puppeteer";
 import path from "path";
 import fs from "fs";
-
-interface LoaderOptions {
-  timeout: number;
-  waitUntil: PuppeteerLifeCycleEvent | PuppeteerLifeCycleEvent[];
-  viewport?: Viewport;
-}
+import { RendererBrowser } from "./browser";
 
 interface MapPosition {
   center: [number, number];
@@ -27,237 +16,75 @@ interface MapStyle {
 }
 
 class WebMaplibreGLRenderer {
-  private readonly options: LoaderOptions;
-  private browser: Browser | null;
-  private page: Page | null;
+  private page: Page | null = null;
 
-  constructor(options: Partial<LoaderOptions> = {}) {
-    const defaultOptions: LoaderOptions = {
-      timeout: 30000,
-      waitUntil: "networkidle0",
-      viewport: {
-        width: 1024,
-        height: 768,
-        deviceScaleFactor: 1,
-        hasTouch: false,
-        isLandscape: true,
-        isMobile: false,
-      },
-    };
+  constructor(private browser: RendererBrowser) {}
 
-    this.options = { ...defaultOptions, ...options };
-    this.browser = null;
-    this.page = null;
-  }
-
-  private async initBrowser(): Promise<void> {
-    if (!this.browser) {
-      const gpuArgs = [
-        "--use-gl=angle",
-        "--enable-webgl",
-        "--ignore-gpu-blocklist",
-        "--enable-gpu-rasterization",
-        "--enable-accelerated-2d-canvas",
-        "--enable-accelerated-compositing",
-        "--enable-threaded-compositing",
-        "--enable-oop-rasterization",
-        "--enable-zero-copy",
-        "--no-first-run",
-        "--no-zygote",
-        "--shared-memory-size=8192",
-        "--font-render-hinting=none", // Disable, since not needed
-      ];
-
-      this.browser = await puppeteer.launch({
-        headless: true,
-        args: [
-          "--no-sandbox",
-          "--disable-setuid-sandbox",
-          "--disable-dev-shm-usage",
-          ...gpuArgs,
-          `--window-size=${this.options.viewport?.width || 1024},${
-            this.options.viewport?.height || 768
-          }`,
-          "--allow-file-access-from-files",
-          // WARN: This ignores potential issues with CORS and our self-signed certs
-          "--disable-web-security",
-          "--ignore-certificate-errors",
-        ],
-        env:
-          process.env.NODE_ENV === "production"
-            ? {
-                ...process.env,
-                DISPLAY: ":99",
-              }
-            : undefined,
-      });
-
-      this.page = await this.browser.newPage();
-
-      // GPU/WebGL Status logging
-      if (this.page) {
-        await this.logRenderingInfo();
-      }
-
-      // Viewport setzen
-      if (this.options.viewport) {
-        await this.setViewport(this.options.viewport);
-      }
-
-      this.page.on("console", (msg) => console.log("Browser Log:", msg.text()));
-      this.page.on("pageerror", (error) => {
-        console.error("JavaScript Error:", error.message);
-      });
-
-      this.page.setDefaultNavigationTimeout(this.options.timeout);
-    }
-  }
-
-  private async logRenderingInfo(): Promise<void> {
-    if (!this.page) return;
-
-    try {
-      // WebGL Availability and Info
-      const webglInfo = await this.page.evaluate(() => {
-        return new Promise((resolve, reject) => {
-          setTimeout(() => {
-            const canvas = document.createElement("canvas");
-
-            // Try WebGL2 first
-            let gl = canvas.getContext("webgl2", {
-              failIfMajorPerformanceCaveat: false,
-              antialias: false,
-              preserveDrawingBuffer: false,
-            });
-            const isWebGL2 = !!gl;
-
-            // If WebGL2 is not available, try WebGL1
-            if (!gl) {
-              // @ts-ignore
-              gl =
-                canvas.getContext("webgl", {
-                  failIfMajorPerformanceCaveat: false,
-                  antialias: false,
-                  preserveDrawingBuffer: false,
-                }) ||
-                canvas.getContext("experimental-webgl", {
-                  failIfMajorPerformanceCaveat: false,
-                  antialias: false,
-                  preserveDrawingBuffer: false,
-                });
-            }
-
-            if (gl) {
-              const debugInfo = gl.getExtension("WEBGL_debug_renderer_info");
-              resolve({
-                version: isWebGL2 ? "WebGL 2.0" : "WebGL 1.0",
-                vendor: debugInfo
-                  ? gl.getParameter(debugInfo.UNMASKED_VENDOR_WEBGL)
-                  : gl.getParameter(gl.VENDOR),
-                renderer: debugInfo
-                  ? gl.getParameter(debugInfo.UNMASKED_RENDERER_WEBGL)
-                  : gl.getParameter(gl.RENDERER),
-                shadingLanguageVersion: gl.getParameter(
-                  gl.SHADING_LANGUAGE_VERSION,
-                ),
-                maxTextureSize: gl.getParameter(gl.MAX_TEXTURE_SIZE),
-                extensions: gl.getSupportedExtensions(),
-              });
-            }
-
-            resolve(null);
-          }, 1000);
-        });
-      });
-      if (process.env.DEBUG_GPU) console.log("WebGL Info:", webglInfo);
-
-      // Chrome GPU Info
-      const gpuInfo = await this.page.evaluate(() => {
-        // @ts-ignore
-        return window.chrome?.gpuInfo;
-      });
-      if (process.env.DEBUG_GPU) console.log("Chrome GPU Info:", gpuInfo);
-    } catch (error) {
-      console.warn("Error collecting rendering information:", error);
-    }
-  }
-
-  private async closeBrowser(): Promise<void> {
-    if (this.browser) {
-      await this.browser.close();
-      this.browser = null;
-      this.page = null;
-    }
-  }
-
-  // Screenshot Funktion die einen Buffer zurückgibt
-  async takeScreenshot(
-    options: Partial<ScreenshotOptions> = {},
+  // Get Map Image as a Buffer
+  async getMapImage(
+    options: Partial<{
+      type: "png" | "jpeg" | "webp";
+      quality: number;
+    }> = {},
   ): Promise<Buffer> {
     if (!this.page)
       throw new Error("No active browser page. Take screenshot failed.");
 
-    const defaultOptions: ScreenshotOptions = {
+    const exportOptions = {
       type: "webp",
-      fullPage: true,
-      encoding: "binary",
       quality: 100,
-    };
-
-    const screenshotOptions: ScreenshotOptions = {
-      ...defaultOptions,
       ...options,
     };
 
-    return (await this.page.screenshot(screenshotOptions)) as Buffer;
+    const dataBufferAsBase64 = await this.page!.evaluate(
+      async (exportOptions) => {
+        // @ts-ignore
+        const map = window.map;
+        if (!map)
+          throw new Error(
+            "No Maplibre instance found. Take screenshot failed.",
+          );
+
+        const canvas = map.getCanvas() as HTMLCanvasElement;
+        if (!canvas)
+          throw new Error("No canvas found. Take screenshot failed.");
+
+        const dataUrl = canvas.toDataURL(
+          exportOptions.type ? `image/${exportOptions.type}` : "image/webp",
+          exportOptions.quality ?? 100,
+        );
+
+        return dataUrl;
+      },
+      exportOptions,
+    );
+
+    return Buffer.from(dataBufferAsBase64.split(",")[1], "base64");
   }
 
-  // Viewport Control
-  async setViewport(viewport: Partial<Viewport>): Promise<void> {
+  async setMapSize(viewport: {
+    width: number;
+    height: number;
+    deviceScaleFactor?: number;
+  }): Promise<void> {
     if (!this.page)
-      throw new Error("No active browser page. Set viewport failed.");
+      throw new Error("No active browser page. Set map size failed.");
 
-    const currentViewport = this.page.viewport();
-    if (!currentViewport)
-      throw new Error("No viewport found. Setting viewport failed.");
-    const newViewport: Viewport = {
-      ...currentViewport,
-      ...viewport,
-    };
-
-    await this.page.setViewport(newViewport);
-
-    // Trigger resize event!
-    this.page.evaluate(() => {
+    return await this.page!.evaluate((viewport) => {
       // @ts-ignore
       const map = window.map;
-      if (map) map.resize();
-    });
-  }
+      if (!map) throw new Error("No map instance found.");
 
-  async getViewport(): Promise<Viewport | null> {
-    if (!this.page) return null;
-    return this.page.viewport();
-  }
+      const container = map.getContainer();
+      if (!container) throw new Error("No container found.");
 
-  // Map Interaktions-Methoden
-  async getMapPosition(): Promise<MapPosition> {
-    if (!this.page)
-      throw new Error("No active browser page. Get map position failed.");
+      container.style.width = `${viewport.width}px`;
+      container.style.height = `${viewport.height}px`;
+      map.setPixelRatio(viewport.deviceScaleFactor ?? 1);
 
-    return await this.page.evaluate(() => {
-      // @ts-ignore
-      const map = window.map;
-      if (!map)
-        throw new Error("No Maplibre instance found. Get map position failed.");
-
-      return {
-        center: map.getCenter().toArray(),
-        zoom: map.getZoom(),
-        bearing: map.getBearing(),
-        pitch: map.getPitch(),
-      };
-    });
+      // Trigger resize event!
+      map.resize();
+    }, viewport);
   }
 
   async setMapPosition(position: Partial<MapPosition>): Promise<void> {
@@ -284,34 +111,15 @@ class WebMaplibreGLRenderer {
       if (!map)
         throw new Error("No Maplibre instance found. Set map style failed.");
 
-      const promise = new Promise((resolve, reject) => {
-        const onError = (e: Error) => {
-          console.error("Map error:", e);
-          reject(e);
-          map.off("idle", onDone);
-        };
-        const onDone = () => {
-          resolve(true);
-          map.off("error", onError);
-        };
-        map.once("error", onError);
-        map.once("idle", onDone);
-      });
-
       if (styleData.url) {
         map.setStyle(styleData.url);
       } else if (styleData.json) {
         map.setStyle(styleData.json);
       }
-
-      return promise;
     }, style);
-
-    // Warten bis der Style geladen ist
-    await this.waitForMapReady();
   }
 
-  async waitForMapReady(): Promise<void> {
+  async waitForMapRendered(): Promise<void> {
     if (!this.page)
       throw new Error("No active browser page. Wait for map idle failed.");
 
@@ -333,7 +141,9 @@ class WebMaplibreGLRenderer {
     });
   }
 
-  async loadHTML(filePath: string): Promise<string> {
+  async initWithHTML(filePath: string): Promise<void> {
+    await this.browser.isReady();
+
     try {
       if (!fs.existsSync(filePath)) {
         throw new Error(`HTML file not found: ${filePath}`);
@@ -341,20 +151,27 @@ class WebMaplibreGLRenderer {
 
       const absolutePath = path.resolve(filePath);
 
-      await this.initBrowser();
-
+      this.page = await this.browser.newPage();
       if (!this.page)
         throw new Error("No browser page initialized. Load HTML failed.");
 
-      // Load file directly via file:// protocol
-      await this.page.goto(`file://${absolutePath}`, {
-        waitUntil: this.options.waitUntil,
+      const session = await this.page.createCDPSession();
+      await session.send(`Emulation.setFocusEmulationEnabled`, {
+        enabled: true,
       });
 
-      await this.waitForMapReady();
+      // Load file directly via file:// protocol
+      await this.page.goto(`file://${absolutePath}`, {
+        timeout: 10000,
+        waitUntil: "networkidle0",
+      });
 
-      const content = await this.page.content();
-      return content;
+      const mapExists = await this.page.evaluate(() => {
+        // @ts-ignore
+        return !!window.map;
+      });
+      if (!mapExists)
+        throw new Error("No Maplibre instance found. Load HTML failed.");
     } catch (error) {
       throw new Error(
         `Error loading HTML: ${
@@ -365,7 +182,8 @@ class WebMaplibreGLRenderer {
   }
 
   async cleanup(): Promise<void> {
-    await this.closeBrowser();
+    if (!this.page) return;
+    await this.page.close();
   }
 }
 
