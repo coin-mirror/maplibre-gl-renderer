@@ -124,25 +124,44 @@ class WebMaplibreGLRenderer {
     if (!this.page)
       throw new Error("No active browser page. Wait for map idle failed.");
 
-    await this.page.evaluate(() => {
-      return new Promise((resolve) => {
-        // @ts-ignore
-        const map = window.map;
-        if (!map)
-          throw new Error(
-            "No Maplibre instance found. Wait for map idle failed.",
-          );
+    const { resolve: resolveWait, promise: waitingPromise } =
+      Promise.withResolvers<void>();
 
-        if (!map.loaded()) {
-          abortSignal.onabort = () => {
-            resolve(undefined);
+    abortSignal.onabort = () => {
+      resolveWait(undefined);
+    };
+
+    this.page
+      .evaluate(() => {
+        return new Promise((resolve) => {
+          // @ts-ignore
+          const map = window.map;
+          if (!map)
+            throw new Error(
+              "No Maplibre instance found. Wait for map idle failed.",
+            );
+
+          const checkMapLoaded = () => {
+            if (!map.areTilesLoaded() || !map.isStyleLoaded()) {
+              setTimeout(checkMapLoaded, 100);
+            } else {
+              resolve(undefined);
+            }
           };
+
+          if (map.loaded()) return checkMapLoaded();
+          map.once("load", checkMapLoaded);
           map.once("idle", resolve);
-        } else {
-          resolve(undefined);
-        }
+        });
+      })
+      .catch(() => {
+        resolveWait(undefined);
+      })
+      .then(() => {
+        resolveWait(undefined);
       });
-    });
+
+    return await waitingPromise;
   }
 
   async initWithHTML(filePath: string): Promise<void> {
