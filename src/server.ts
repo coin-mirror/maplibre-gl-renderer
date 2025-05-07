@@ -95,13 +95,14 @@ class MapScreenshotServer {
   private setupRoutes(): void {
     this.server = serve({
       port: this.port,
+      idleTimeout: 255,
       routes: {
         "/health": () => {
           if (!this.renderers.length || this.renderers.every((r) => !r)) {
             return new Response(
               JSON.stringify({
                 status: "error",
-                error: "Renderer not initialized",
+                error: "Renderers not initialized",
               }),
               {
                 status: 500,
@@ -113,8 +114,9 @@ class MapScreenshotServer {
           }
 
           const queueStatus = {
-            pending: this.renderQueue.size,
-            isProcessing: this.isProcessing,
+            inQueue: this.renderQueue.size,
+            inProgress: this.renderQueue.pending,
+            totalWorkers: this.rendererCount,
           };
           return new Response(
             JSON.stringify({ status: "ok", queue: queueStatus }),
@@ -146,6 +148,10 @@ class MapScreenshotServer {
               },
             );
           }
+
+          req.signal.onabort = () => {
+            console.log("Request cancelled");
+          };
 
           try {
             const screenshot = await this.addToRenderQueue(
@@ -232,7 +238,7 @@ class MapScreenshotServer {
       const renderer = this.renderers[rendererIndex];
 
       if (!renderer) {
-        throw new Error("Renderer not initialized, hard crash");
+        return task.reject(new Error("Renderer not initialized, hard crash"));
       }
 
       console.log(`Processing task on renderer #${rendererIndex}...`);
@@ -241,6 +247,10 @@ class MapScreenshotServer {
       if (task.signal.aborted) {
         return task.reject(new Error("Task was aborted during processing"));
       }
+
+      setTimeout(() => {
+        task.reject(new Error("Timeout"));
+      }, 180000);
 
       await Promise.all([
         renderer.setMapSize({
@@ -288,10 +298,13 @@ class MapScreenshotServer {
         errorMessage.includes("detached")
       ) {
         console.error(
-          `Critical error in renderer ${rendererIndex}... Cleaning up`,
+          `Critical error in renderer ${rendererIndex}... Cleaning up and restarting`,
         );
-        await this.renderers[rendererIndex]?.cleanup();
+        await this.renderers[rendererIndex]?.cleanup().catch((err) => {
+          console.error("Error cleaning up renderer:", err);
+        });
         this.renderers[rendererIndex] = null;
+        this.renderers[rendererIndex] = new WebMaplibreGLRenderer(this.browser);
 
         return task.reject(new Error("Critical error in renderer"));
       }

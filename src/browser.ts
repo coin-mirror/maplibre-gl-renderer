@@ -88,6 +88,7 @@ export class RendererBrowser {
           "--disable-web-security",
           "--ignore-certificate-errors",
         ],
+        protocolTimeout: 360_000,
         env:
           process.env.NODE_ENV === "production"
             ? {

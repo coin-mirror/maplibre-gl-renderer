@@ -16,6 +16,9 @@ LABEL org.opencontainers.image.source="https://github.com/coin-mirror/maplibre-g
 
 WORKDIR /app
 
+RUN useradd -m -u 1111 -s /bin/bash appuser \
+  && chown -R appuser:appuser /app
+
 # Install Chromium and dependencies (for puppeteer)
 RUN apt-get update && apt-get install -y \
   chromium \
@@ -40,9 +43,6 @@ RUN apt-get update && apt-get install -y \
   libgl1-mesa-dri \
   libgl1-mesa-glx \
   && rm -rf /var/lib/apt/lists/*
-
-RUN useradd -m -u 1111 -s /bin/bash appuser \
-  && chown -R appuser:appuser /app
 
 COPY --from=builder --chown=appuser:appuser /app/dist /app/dist
 COPY --from=builder --chown=appuser:appuser  /app/package.json /app/map.html /app/
