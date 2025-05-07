@@ -263,6 +263,7 @@ class MapScreenshotServer {
           height: task.body.height || 1080,
           pixelRatio: task.body.ratio || 1,
         },
+        task.signal,
       );
 
       task.resolve(screenshot);
