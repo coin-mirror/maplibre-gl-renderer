@@ -248,38 +248,22 @@ class MapScreenshotServer {
         task.reject(new Error("Timeout"));
       }, 180000);
 
-      await Promise.all([
-        renderer.setMapSize({
-          width: task.body.width || 1920,
-          height: task.body.height || 1080,
-          deviceScaleFactor: task.body.ratio || 1,
-        }),
-        renderer.setMapPosition({
+      const screenshot = await renderer.getMapImage(
+        task.body.style as any,
+        {
           center: task.body.center,
           zoom: task.body.zoom,
           pitch: task.body.pitch || 0,
           bearing: task.body.bearing || 0,
-        }),
-        renderer.setMapStyle({ json: task.body.style }),
-      ]);
-
-      // Check for abort signal again
-      if (task.signal.aborted) {
-        return task.reject(new Error("Task was aborted during map setup"));
-      }
-
-      // Wait until the style is loaded
-      await renderer.waitForMapRendered(task.signal);
-
-      // Check for abort signal again
-      if (task.signal.aborted) {
-        return task.reject(new Error("Task was aborted during map rendering"));
-      }
-
-      const screenshot = await renderer.getMapImage({
-        type: task.body.format || "webp",
-        quality: task.body.quality ?? 100,
-      });
+        },
+        {
+          format: task.body.format || "webp",
+          quality: task.body.quality ?? 100,
+          width: task.body.width || 1920,
+          height: task.body.height || 1080,
+          pixelRatio: task.body.ratio || 1,
+        },
+      );
 
       task.resolve(screenshot);
     } catch (error) {

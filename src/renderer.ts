@@ -22,146 +22,70 @@ class WebMaplibreGLRenderer {
 
   // Get Map Image as a Buffer
   async getMapImage(
+    style: MapStyle,
+    viewport: MapPosition,
     options: Partial<{
-      type: "png" | "jpeg" | "webp";
+      width: number;
+      height: number;
       quality: number;
+      timeoutMs: number;
+      format: "png" | "jpeg" | "webp";
+      pixelRatio: number;
     }> = {},
+    abortSignal?: AbortSignal,
   ): Promise<Buffer> {
     if (!this.page)
       throw new Error("No active browser page. Take screenshot failed.");
 
     const exportOptions = {
-      type: "webp",
-      quality: 100,
-      ...options,
+      style,
+      viewport,
+      options: {
+        width: 1000,
+        height: 1000,
+        format: "png",
+        timeoutMs: 30000,
+        pixelRatio: 1,
+        ...options,
+        quality: Math.max(Math.min((options.quality || 100) / 100, 1), 0),
+      },
     };
 
-    const dataBufferAsBase64 = await this.page!.evaluate(
-      async (exportOptions) => {
+    return new Promise<Buffer>(async (resolve, reject) => {
+      const abortHandler = () => {
+        reject(new Error("Map image generation aborted."));
+      };
+
+      if (abortSignal) {
+        abortSignal.onabort = abortHandler;
+      }
+
+      const result = await this.page!.evaluate(async (exportOptions) => {
         // @ts-ignore
-        const map = window.map;
-        if (!map)
+        const createMapImage = window.createMapImage;
+        if (!createMapImage)
           throw new Error(
-            "No Maplibre instance found. Take screenshot failed.",
+            "No createMapImage Function found. Image creation failed.",
           );
 
-        const canvas = map.getCanvas() as HTMLCanvasElement;
-        if (!canvas)
-          throw new Error("No canvas found. Take screenshot failed.");
-
-        const dataUrl = canvas.toDataURL(
-          exportOptions.type ? `image/${exportOptions.type}` : "image/webp",
-          exportOptions.quality ?? 100,
+        return createMapImage(
+          exportOptions.style,
+          exportOptions.viewport,
+          exportOptions.options,
         );
+      }, exportOptions);
 
-        return dataUrl;
-      },
-      exportOptions,
-    );
-
-    const [_, base64] = dataBufferAsBase64.split(",");
-    return Buffer.from(base64 as string, "base64");
-  }
-
-  async setMapSize(viewport: {
-    width: number;
-    height: number;
-    deviceScaleFactor?: number;
-  }): Promise<void> {
-    if (!this.page)
-      throw new Error("No active browser page. Set map size failed.");
-
-    return await this.page!.evaluate((viewport) => {
-      // @ts-ignore
-      const map = window.map;
-      if (!map) throw new Error("No map instance found.");
-
-      const container = map.getContainer();
-      if (!container) throw new Error("No container found.");
-
-      container.style.width = `${viewport.width}px`;
-      container.style.height = `${viewport.height}px`;
-      map.setPixelRatio(viewport.deviceScaleFactor ?? 1);
-
-      // Trigger resize event!
-      map.resize();
-    }, viewport);
-  }
-
-  async setMapPosition(position: Partial<MapPosition>): Promise<void> {
-    if (!this.page)
-      throw new Error("No active browser page. Set map position failed.");
-
-    await this.page.evaluate((pos) => {
-      // @ts-ignore
-      const map = window.map;
-      if (!map)
-        throw new Error("No Maplibre instance found. Set map position failed.");
-
-      map.jumpTo(pos);
-    }, position);
-  }
-
-  async setMapStyle(style: MapStyle): Promise<void> {
-    if (!this.page)
-      throw new Error("No active browser page. Set map style failed.");
-
-    await this.page.evaluate((styleData) => {
-      // @ts-ignore
-      const map = window.map;
-      if (!map)
-        throw new Error("No Maplibre instance found. Set map style failed.");
-
-      if (styleData.url) {
-        map.setStyle(styleData.url);
-      } else if (styleData.json) {
-        map.setStyle(styleData.json);
+      if (abortSignal) {
+        abortSignal.onabort = null;
       }
-    }, style);
-  }
 
-  async waitForMapRendered(abortSignal: AbortSignal): Promise<void> {
-    if (!this.page)
-      throw new Error("No active browser page. Wait for map idle failed.");
+      if (abortSignal?.aborted) {
+        return;
+      }
 
-    const { resolve: resolveWait, promise: waitingPromise } =
-      Promise.withResolvers<void>();
-
-    abortSignal.onabort = () => {
-      resolveWait(undefined);
-    };
-
-    this.page
-      .evaluate(() => {
-        return new Promise((resolve) => {
-          // @ts-ignore
-          const map = window.map;
-          if (!map)
-            throw new Error(
-              "No Maplibre instance found. Wait for map idle failed.",
-            );
-
-          const checkMapLoaded = () => {
-            if (!map.areTilesLoaded() || !map.isStyleLoaded()) {
-              setTimeout(checkMapLoaded, 100);
-            } else {
-              resolve(undefined);
-            }
-          };
-
-          if (map.loaded()) return checkMapLoaded();
-          map.once("load", checkMapLoaded);
-          map.once("idle", resolve);
-        });
-      })
-      .catch(() => {
-        resolveWait(undefined);
-      })
-      .then(() => {
-        resolveWait(undefined);
-      });
-
-    return await waitingPromise;
+      const [_, base64] = result.split(",");
+      resolve(Buffer.from(base64 as string, "base64"));
+    });
   }
 
   async initWithHTML(filePath: string): Promise<void> {
@@ -191,10 +115,10 @@ class WebMaplibreGLRenderer {
 
       const mapExists = await this.page.evaluate(() => {
         // @ts-ignore
-        return !!window.map;
+        return !!window.createMapImage;
       });
       if (!mapExists)
-        throw new Error("No Maplibre instance found. Load HTML failed.");
+        throw new Error("No createMapImage Function found. Load HTML failed.");
     } catch (error) {
       throw new Error(
         `Error loading HTML: ${

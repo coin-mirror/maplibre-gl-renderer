@@ -15,39 +15,134 @@
             background-color: transparent;
         }
     </style>
+    <meta charset="utf-16">
 </head>
 
 <body>
-    <div id="map"></div>
+    <div id="maps"></div>
     <script>
         maplibregl.setMaxParallelImageRequests(128);
-        const map = new maplibregl.Map({
-            container: 'map',
-            style: {
-                version: 8,
-                sources: {},
-                layers: []
+
+        async function createMapImage(style, viewport, options) {
+            // Create a unique container ID using current timestamp
+            const containerId = `map-container-${Date.now()}`;
+
+            // Create a new div element with the unique ID
+            const container = document.createElement('div');
+            container.id = containerId;
+
+            // Set initial dimensions based on options
+            container.style.width = `${options.width}px`;
+            container.style.height = `${options.height}px`;
+
+            // Append the container to the maps div
+            document.getElementById('maps').appendChild(container);
+
+            const quality = options.quality || 1;
+            const map = new maplibregl.Map({
+                container: containerId,
+                style: {
+                    ...style,
+                    sources: {
+                        ...style.sources,
+                        ...(Object.values(style.sources).reduce((acc, source) => {
+                            acc[source.id] = source;
+
+                            if (source.type === "geojson" && "data" in source && !!source.data && quality > 0.95) {
+                                acc[source.id] = {
+                                    ...source,
+                                    tolerance: 0, // no simplification, for high quality
+                                };
+                            }
+
+                            return acc;
+                        }, {})),
+                    },
+                },
+                maxCanvasSize: [
+                    Math.ceil(options.width * (options.pixelRatio || 1) + 100),
+                    Math.ceil(options.height * (options.pixelRatio || 1) + 100),
+                ],
+                center: viewport.center || [0, 0],
+                zoom: viewport.zoom || 0,
+                bearing: viewport.bearing || 0,
+                pitch: viewport.pitch || 0,
+                pixelRatio: options.pixelRatio || 1,
+                attributionControl: false,
+                interactive: false,
+                fadeDuration: 0,
+                bearingSnap: 0,
+                canvasContextAttributes: {
+                    preserveDrawingBuffer: true,
+                    antialias: true,
+                    powerPreference: "high-performance",
+                    desynchronized: true,
+                },
+                validateStyle: false,
+            });
+            map.setPadding({
+                top: 0,
+                bottom: 0,
+                left: 0,
+                right: 0,
+            });
+
+            const blob = await getImageFromMap(map, {
+                timeoutMs: options.timeoutMs || 30000,
+                format: options.format || "png",
+                quality,
+            });
+            map.remove();
+            document.getElementById('maps').removeChild(container);
+
+            return blob;
+        }
+
+        function getImageFromMap(
+            renderMap,
+            {
+                timeoutMs,
+                format,
+                quality,
             },
-            maxCanvasSize: [6000, 6000],
-            center: [0, 0],
-            zoom: 0,
-            attributionControl: false,
-            interactive: false,
-            fadeDuration: 0,
-            bearingSnap: 0,
-            canvasContextAttributes: {
-                preserveDrawingBuffer: true,
-                antialias: true,
-            },
-        });
-        map.setPadding({
-            top: 0,
-            bottom: 0,
-            left: 0,
-            right: 0,
-        });
-        window.map = map;
+        ) {
+            return new Promise((resolve, reject) => {
+                // Set the timeout for the promise
+                const timeout = setTimeout(
+                    () => reject(new Error("Timeout waiting for map to load.")),
+                    timeoutMs,
+                );
+
+                renderMap.once("styledata", () => {
+                    const genImage = () => {
+                        if (!renderMap.areTilesLoaded() || !renderMap.isStyleLoaded())
+                            return setTimeout(genImage, 100); // Recursive check with some delay
+
+                        clearTimeout(timeout);
+
+                        if (!renderMap.getCanvas()) {
+                            return reject(
+                                new Error("Failed to generate map image, no canvas spawned."),
+                            );
+                        }
+
+                        const dataUrl = renderMap.getCanvas().toDataURL(
+                            `image/${format}`,
+                            quality, // Quality, between 0 and 1
+                        );
+
+                        resolve(dataUrl);
+                    };
+
+                    if (renderMap.loaded()) setTimeout(genImage, 200);
+                    else renderMap.once("idle", genImage);
+                });
+            });
+        };
+
+        window.createMapImage = createMapImage;
     </script>
+    <!-- <script src="./test.js"></script> -->
 </body>
 
 </html>
