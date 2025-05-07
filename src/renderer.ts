@@ -59,7 +59,8 @@ class WebMaplibreGLRenderer {
       exportOptions,
     );
 
-    return Buffer.from(dataBufferAsBase64.split(",")[1], "base64");
+    const [_, base64] = dataBufferAsBase64.split(",");
+    return Buffer.from(base64 as string, "base64");
   }
 
   async setMapSize(viewport: {

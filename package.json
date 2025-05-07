@@ -1,23 +1,21 @@
 {
   "name": "map-render",
   "module": "src/index.ts",
-  "type": "module",
-  "scripts": {
-    "start": "bun ./dist/index.cjs",
-    "dev": "bun run --watch src/index.ts",
-    "build": "bun build ./src/index.ts --outfile ./dist/index.cjs --target=bun"
-  },
-  "devDependencies": {
-    "@types/bun": "latest",
-    "@types/express": "^5.0.0"
+  "dependencies": {
+    "p-queue": "^8.0.1",
+    "puppeteer": "^23.7.0",
+    "zod": "^3.23.8"
   },
   "peerDependencies": {
     "typescript": "^5.0.0"
   },
-  "dependencies": {
-    "express": "^4.21.1",
-    "p-queue": "^8.0.1",
-    "puppeteer": "^23.7.0",
-    "zod": "^3.23.8"
+  "scripts": {
+    "start": "bun ./dist/index.cjs",
+    "dev": "WORKER_COUNT=1 bun run --watch src/index.ts",
+    "build": "bun build ./src/index.ts --outfile ./dist/index.cjs --target=bun"
+  },
+  "type": "module",
+  "devDependencies": {
+    "@types/bun": "^1.2.12"
   }
 }

@@ -72,6 +72,10 @@ export class RendererBrowser {
             this.options.viewport?.height || 768
           }`,
 
+          // Automatic fallback to software WebGL has been deprecated. We flag to
+          // opt in to lower security guarantees for trusted content.
+          "--enable-unsafe-swiftshader",
+
           // Disable background tabs throttling:
           "--disable-background-timer-throttling",
           "--disable-backgrounding-occluded-windows",

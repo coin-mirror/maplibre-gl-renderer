@@ -1,5 +1,5 @@
-import express from "express";
-import type { Request, Response } from "express";
+import { serve } from "bun";
+import type { BunRequest } from "bun";
 import { z } from "zod";
 import WebMaplibreGLRenderer from "./renderer";
 import PQueue from "p-queue";
@@ -44,7 +44,8 @@ interface RenderTask {
 }
 
 class MapScreenshotServer {
-  private app;
+  private server: Bun.Server | null = null;
+
   private browser = new RendererBrowser({
     timeout: 30000,
     waitUntil: "networkidle0",
@@ -62,15 +63,11 @@ class MapScreenshotServer {
     port: number = 3000,
     rendererCount: number = 1,
   ) {
-    this.app = express();
     this.htmlPath = htmlPath;
     this.port = port;
     this.rendererCount = rendererCount;
     this.renderQueue = new PQueue({ concurrency: rendererCount });
     this.renderers = new Array(rendererCount).fill(null);
-
-    // JSON Body Parser
-    this.app.use(express.json({ limit: "50mb" }));
 
     this.browser.browser?.on("disconnected", () => {
       console.log("Browser disconnected. Let's try to restart...");
@@ -96,87 +93,118 @@ class MapScreenshotServer {
   }
 
   private setupRoutes(): void {
-    // Health Check
-    this.app.get("/health", (req: Request, res: Response): any => {
-      if (!this.renderers.length || this.renderers.every((r) => !r)) {
-        return res.status(500).json({ error: "Renderer not initialized" });
-      }
-
-      const queueStatus = {
-        pending: this.renderQueue.size,
-        isProcessing: this.isProcessing,
-      };
-      res.status(200).json({ status: "ok", queue: queueStatus });
-    });
-
-    // Screenshot Endpoint
-    this.app.post(
-      "/render",
-      async (req: Request, res: Response): Promise<any> => {
-        // Create a new AbortController if the request doesn't already have one
-        const requestAbortController = new AbortController();
-
-        // Handle client disconnection
-        req.on("close", () => {
-          if (!res.headersSent) {
-            requestAbortController.abort("Client disconnected");
+    this.server = serve({
+      port: this.port,
+      routes: {
+        "/health": () => {
+          if (!this.renderers.length || this.renderers.every((r) => !r)) {
+            return new Response(
+              JSON.stringify({
+                status: "error",
+                error: "Renderer not initialized",
+              }),
+              {
+                status: 500,
+                headers: {
+                  "Content-Type": "application/json",
+                },
+              },
+            );
           }
-        });
 
-        try {
-          // Validate Request Body
-          const validationResult = RequestSchema.safeParse(req.body);
+          const queueStatus = {
+            pending: this.renderQueue.size,
+            isProcessing: this.isProcessing,
+          };
+          return new Response(
+            JSON.stringify({ status: "ok", queue: queueStatus }),
+            {
+              status: 200,
+              headers: {
+                "Content-Type": "application/json",
+              },
+            },
+          );
+        },
+
+        "/render": async (req: BunRequest) => {
+          const body = await req.json();
+          const validationResult = RequestSchema.safeParse(body);
 
           if (!validationResult.success) {
-            return res.status(400).json({
-              error: "Invalid Request Format",
-              details: validationResult.error.format(),
-            });
+            return new Response(
+              JSON.stringify({
+                status: "error",
+                error: "Invalid Request Format",
+                details: validationResult.error.format(),
+              }),
+              {
+                status: 400,
+                headers: {
+                  "Content-Type": "application/json",
+                },
+              },
+            );
           }
 
-          // Process on Queue
-          const screenshot = await this.addToRenderQueue(
-            validationResult.data,
-            requestAbortController.signal,
+          try {
+            const screenshot = await this.addToRenderQueue(
+              validationResult.data,
+              req.signal,
+            );
+
+            return new Response(screenshot, {
+              headers: {
+                "Content-Type": `image/${
+                  validationResult.data.format || "webp"
+                }`,
+                "Content-Length": screenshot.length.toString(),
+                "Last-Modified": new Date().toUTCString(),
+                "Content-Encoding": "identity",
+              },
+            });
+          } catch (error) {
+            if (
+              (error instanceof Error && error.name === "AbortError") ||
+              !!req.signal.aborted
+            ) {
+              console.log(
+                "Request cancelled:",
+                error instanceof Error ? error.message : error,
+              );
+              return new Response("Request cancelled", {
+                status: 499,
+              });
+            }
+
+            console.error("Image Generation failed:", error);
+
+            return new Response("Image Generation failed", {
+              status: 500,
+              headers: {
+                "Content-Type": "text/plain",
+              },
+            });
+          }
+        },
+
+        "/status/queue": () => {
+          return new Response(
+            JSON.stringify({
+              availableRenderers: this.rendererCount,
+              size: this.renderQueue.size,
+              pending: this.renderQueue.pending,
+              isProcessing: this.isProcessing,
+            }),
+            {
+              status: 200,
+              headers: {
+                "Content-Type": "application/json",
+              },
+            },
           );
-
-          res.set({
-            "Content-Type": `image/${validationResult.data.format || "webp"}`,
-            "Content-Length": screenshot.length,
-            "Last-Modified": new Date().toUTCString(),
-            "Content-Encoding": "identity",
-          });
-
-          return res.end(screenshot, "binary");
-        } catch (error) {
-          if (
-            (error instanceof Error && error.name === "AbortError") ||
-            !!requestAbortController.signal.aborted
-          ) {
-            console.log("Request was cancelled by the client", error);
-            return res.status(499).json({
-              error: "Request cancelled",
-              message: "The request was cancelled by the client",
-            });
-          }
-
-          console.error("Image Generation failed:", error);
-          res.status(500).json({
-            error: "Image Generation failed",
-            message: error instanceof Error ? error.message : String(error),
-          });
-        }
+        },
       },
-    );
-
-    // Queue Status Endpoint
-    this.app.get("/status/queue", (req: Request, res: Response) => {
-      res.json({
-        availableRenderers: this.rendererCount,
-        size: this.renderQueue.size,
-        pending: this.renderQueue.pending,
-        isProcessing: this.isProcessing,
-      });
     });
   }
 
@@ -279,10 +307,6 @@ class MapScreenshotServer {
       await Promise.all(
         this.renderers.map((_, index) => this.initRenderer(index)),
       );
-
-      this.app.listen(this.port, () => {
-        console.log(`Server running on port ${this.port}`);
-      });
     } catch (error) {
       console.error("Server Start failed:", error);
       throw error;
