@@ -120,7 +120,7 @@ class WebMaplibreGLRenderer {
     }, style);
   }
 
-  async waitForMapRendered(): Promise<void> {
+  async waitForMapRendered(abortSignal: AbortSignal): Promise<void> {
     if (!this.page)
       throw new Error("No active browser page. Wait for map idle failed.");
 
@@ -134,6 +134,9 @@ class WebMaplibreGLRenderer {
           );
 
         if (!map.loaded()) {
+          abortSignal.onabort = () => {
+            resolve(undefined);
+          };
           map.once("idle", resolve);
         } else {
           resolve(undefined);

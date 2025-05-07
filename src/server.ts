@@ -149,10 +149,6 @@ class MapScreenshotServer {
             );
           }
 
-          req.signal.onabort = () => {
-            console.log("Request cancelled");
-          };
-
           try {
             const screenshot = await this.addToRenderQueue(
               validationResult.data,
@@ -273,7 +269,7 @@ class MapScreenshotServer {
       }
 
       // Wait until the style is loaded
-      await renderer.waitForMapRendered();
+      await renderer.waitForMapRendered(task.signal);
 
       // Check for abort signal again
       if (task.signal.aborted) {
