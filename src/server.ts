@@ -40,6 +40,7 @@ interface RenderTask {
   body: RequestBody;
   resolve: (value: Buffer) => void;
   reject: (reason: any) => void;
+  signal: AbortSignal;
 }
 
 class MapScreenshotServer {
@@ -112,6 +113,16 @@ class MapScreenshotServer {
     this.app.post(
       "/render",
       async (req: Request, res: Response): Promise<any> => {
+        // Create a new AbortController if the request doesn't already have one
+        const requestAbortController = new AbortController();
+
+        // Handle client disconnection
+        req.on("close", () => {
+          if (!res.headersSent) {
+            requestAbortController.abort("Client disconnected");
+          }
+        });
+
         try {
           // Validate Request Body
           const validationResult = RequestSchema.safeParse(req.body);
@@ -124,7 +135,10 @@ class MapScreenshotServer {
           }
 
           // Process on Queue
-          const screenshot = await this.addToRenderQueue(validationResult.data);
+          const screenshot = await this.addToRenderQueue(
+            validationResult.data,
+            requestAbortController.signal,
+          );
 
           res.set({
             "Content-Type": `image/${validationResult.data.format || "webp"}`,
@@ -135,6 +149,17 @@ class MapScreenshotServer {
 
           return res.end(screenshot, "binary");
         } catch (error) {
+          if (
+            (error instanceof Error && error.name === "AbortError") ||
+            !!requestAbortController.signal.aborted
+          ) {
+            console.log("Request was cancelled by the client", error);
+            return res.status(499).json({
+              error: "Request cancelled",
+              message: "The request was cancelled by the client",
+            });
+          }
+
           console.error("Image Generation failed:", error);
           res.status(500).json({
             error: "Image Generation failed",
@@ -155,15 +180,23 @@ class MapScreenshotServer {
     });
   }
 
-  private addToRenderQueue(body: RequestBody): Promise<Buffer> {
+  private addToRenderQueue(
+    body: RequestBody,
+    signal: AbortSignal,
+  ): Promise<Buffer> {
     return new Promise((resolve, reject) => {
-      const task: RenderTask = { body, resolve, reject };
+      const task: RenderTask = { body, resolve, reject, signal };
 
       this.renderQueue.add(() => this.processRenderTask(task)).catch(reject);
     });
   }
 
   private async processRenderTask(task: RenderTask): Promise<void> {
+    // If the task has been aborted, reject immediately
+    if (task.signal.aborted) {
+      return task.reject(new Error("Task was aborted before processing"));
+    }
+
     const rendererIndex = this.getNextRendererIndex();
 
     try {
@@ -175,6 +208,11 @@ class MapScreenshotServer {
       }
 
       console.log(`Processing task on renderer #${rendererIndex}...`);
+
+      // Check for abort signal before each async operation
+      if (task.signal.aborted) {
+        return task.reject(new Error("Task was aborted during processing"));
+      }
 
       await Promise.all([
         renderer.setMapSize({
@@ -191,8 +229,18 @@ class MapScreenshotServer {
         renderer.setMapStyle({ json: task.body.style }),
       ]);
 
+      // Check for abort signal again
+      if (task.signal.aborted) {
+        return task.reject(new Error("Task was aborted during map setup"));
+      }
+
       // Wait until the style is loaded
       await renderer.waitForMapRendered();
+
+      // Check for abort signal again
+      if (task.signal.aborted) {
+        return task.reject(new Error("Task was aborted during map rendering"));
+      }
 
       const screenshot = await renderer.getMapImage({
         type: task.body.format || "webp",
