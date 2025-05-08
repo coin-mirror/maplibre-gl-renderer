@@ -10,9 +10,9 @@
     "typescript": "^5.0.0"
   },
   "scripts": {
-    "start": "bun ./dist/index.cjs",
+    "start": "bun ./dist/index.js",
     "dev": "WORKER_COUNT=1 bun run --watch src/index.ts",
-    "build": "bun build ./src/index.ts --outfile ./dist/index.cjs --target=bun"
+    "build": "bun build ./src/index.ts --outdir ./dist --target=bun --sourcemap"
   },
   "type": "module",
   "devDependencies": {

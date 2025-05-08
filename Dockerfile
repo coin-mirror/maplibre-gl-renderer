@@ -1,4 +1,4 @@
-FROM oven/bun:1 AS builder
+FROM oven/bun:1.2.12 AS builder
 
 WORKDIR /app
 COPY package.json bun.lockb tsconfig.json map.html ./
@@ -10,7 +10,7 @@ COPY ./src/ ./src/
 # Will create dist folder
 RUN bun run build
 
-FROM oven/bun:1-debian
+FROM oven/bun:1.2.12-debian
 
 LABEL org.opencontainers.image.source="https://github.com/coin-mirror/maplibre-gl-renderer"
 

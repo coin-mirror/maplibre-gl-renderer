@@ -74,7 +74,7 @@
                 bearingSnap: 0,
                 canvasContextAttributes: {
                     preserveDrawingBuffer: true,
-                    antialias: true,
+                    antialias: quality > 0.90,
                     powerPreference: "high-performance",
                     desynchronized: true,
                 },
@@ -88,11 +88,11 @@
             });
 
             const blob = await getImageFromMap(map, {
-                timeoutMs: options.timeoutMs || 30000,
                 format: options.format || "png",
                 quality,
             });
-            map.remove();
+
+            await map.remove();
             document.getElementById('maps').removeChild(container);
 
             return blob;
@@ -101,40 +101,39 @@
         function getImageFromMap(
             renderMap,
             {
-                timeoutMs,
                 format,
                 quality,
             },
         ) {
             return new Promise((resolve, reject) => {
-                // Set the timeout for the promise
-                const timeout = setTimeout(
-                    () => reject(new Error("Timeout waiting for map to load.")),
-                    timeoutMs,
-                );
+                const genImage = () => {
+                    if (!renderMap.areTilesLoaded() || !renderMap.isStyleLoaded())
+                        return setTimeout(genImage, 100); // Recursive check with some delay
+
+                    if (!renderMap.getCanvas()) {
+                        return reject(
+                            new Error("Failed to generate map image, no canvas spawned."),
+                        );
+                    }
+
+                    const dataUrl = renderMap.getCanvas().toDataURL(
+                        `image/${format}`,
+                        quality, // Quality, between 0 and 1
+                    );
+
+                    resolve(dataUrl);
+                };
+
+                if (renderMap.isStyleLoaded()) {
+                    return setTimeout(genImage, 100);
+                }
+
+                if (renderMap.loaded()) {
+                    return setTimeout(genImage, 100);
+                }
 
                 renderMap.once("styledata", () => {
-                    const genImage = () => {
-                        if (!renderMap.areTilesLoaded() || !renderMap.isStyleLoaded())
-                            return setTimeout(genImage, 100); // Recursive check with some delay
-
-                        clearTimeout(timeout);
-
-                        if (!renderMap.getCanvas()) {
-                            return reject(
-                                new Error("Failed to generate map image, no canvas spawned."),
-                            );
-                        }
-
-                        const dataUrl = renderMap.getCanvas().toDataURL(
-                            `image/${format}`,
-                            quality, // Quality, between 0 and 1
-                        );
-
-                        resolve(dataUrl);
-                    };
-
-                    if (renderMap.loaded()) setTimeout(genImage, 200);
+                    if (renderMap.loaded()) setTimeout(genImage, 100);
                     else renderMap.once("idle", genImage);
                 });
             });

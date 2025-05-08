@@ -26,4 +26,10 @@ cleanup() {
 trap cleanup SIGTERM SIGINT SIGHUP
 
 # Run the application
-exec bun run start
+bun run start
+
+status=$?
+if [ $status -ne 0 ]; then
+    echo "Application failed with status $status, running cleanup..."
+    cleanup
+fi

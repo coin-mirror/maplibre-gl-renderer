@@ -46,10 +46,6 @@ interface RenderTask {
 class MapScreenshotServer {
   private server: Bun.Server | null = null;
 
-  private browser = new RendererBrowser({
-    timeout: 30000,
-    waitUntil: "networkidle0",
-  });
   private renderers: (WebMaplibreGLRenderer | null)[] = [];
   private currentRendererIndex: number = 0;
   private htmlPath: string;
@@ -69,17 +65,12 @@ class MapScreenshotServer {
     this.renderQueue = new PQueue({ concurrency: rendererCount });
     this.renderers = new Array(rendererCount).fill(null);
 
-    this.browser.browser?.on("disconnected", () => {
-      console.log("Browser disconnected. Let's try to restart...");
-      this.restart();
-    });
-
     this.setupRoutes();
   }
 
   private async initRenderer(index: number): Promise<void> {
     if (!this.renderers[index]) {
-      this.renderers[index] = new WebMaplibreGLRenderer(this.browser);
+      this.renderers[index] = new WebMaplibreGLRenderer();
 
       await this.renderers[index]!.initWithHTML(this.htmlPath);
       console.log(`Map-Renderer ${index} ready`);
@@ -285,7 +276,7 @@ class MapScreenshotServer {
           console.error("Error cleaning up renderer:", err);
         });
         this.renderers[rendererIndex] = null;
-        this.renderers[rendererIndex] = new WebMaplibreGLRenderer(this.browser);
+        this.renderers[rendererIndex] = new WebMaplibreGLRenderer();
 
         return task.reject(new Error("Critical error in renderer"));
       }
@@ -296,8 +287,6 @@ class MapScreenshotServer {
 
   async start(): Promise<void> {
     try {
-      await this.browser.isReady();
-
       await Promise.all(
         this.renderers.map((_, index) => this.initRenderer(index)),
       );
@@ -307,38 +296,8 @@ class MapScreenshotServer {
     }
   }
 
-  private async restart(): Promise<void> {
-    console.log("Restarting browser and renderers...");
-    await this.renderQueue.onIdle();
-
-    console.log("Cleaning up browser");
-    const closeBrowser = this.browser.close();
-
-    this.renderers = new Array(this.rendererCount).fill(null);
-
-    await closeBrowser;
-
-    console.log("Creating new browser instance");
-    this.browser = new RendererBrowser({
-      timeout: 30000,
-      waitUntil: "networkidle0",
-    });
-
-    await this.browser.isReady();
-
-    await Promise.all(
-      this.renderers.map((_, index) => this.initRenderer(index)),
-    );
-
-    console.log("Browser and renderers restarted. Ready to go!");
-  }
-
   async stop(): Promise<void> {
-    const closeBrowser = this.browser.close();
-
     this.renderers = new Array(this.rendererCount).fill(null);
-
-    await closeBrowser;
   }
 }
 

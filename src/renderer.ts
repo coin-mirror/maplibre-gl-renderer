@@ -15,10 +15,34 @@ interface MapStyle {
   json?: object;
 }
 
+declare global {
+  interface Window {
+    createMapImage: (
+      style: MapStyle,
+      viewport: MapPosition,
+      options: {
+        width: number;
+        height: number;
+        pixelRatio?: number;
+        format?: string;
+        quality?: number;
+      },
+    ) => Promise<string>;
+  }
+}
+
 class WebMaplibreGLRenderer {
+  private browser = new RendererBrowser({
+    timeout: 30000,
+    waitUntil: "networkidle0",
+  });
   private page: Page | null = null;
 
-  constructor(private browser: RendererBrowser) {}
+  constructor() {
+    this.browser.browser?.on("disconnected", () => {
+      throw new Error("Browser disconnected. Renderer cannot continue.");
+    });
+  }
 
   // Get Map Image as a Buffer
   async getMapImage(
@@ -28,7 +52,6 @@ class WebMaplibreGLRenderer {
       width: number;
       height: number;
       quality: number;
-      timeoutMs: number;
       format: "png" | "jpeg" | "webp";
       pixelRatio: number;
     }> = {},
@@ -44,7 +67,6 @@ class WebMaplibreGLRenderer {
         width: 1000,
         height: 1000,
         format: "png",
-        timeoutMs: 30000,
         pixelRatio: 1,
         ...options,
         quality: Math.max(Math.min((options.quality || 100) / 100, 1), 0),
@@ -60,15 +82,8 @@ class WebMaplibreGLRenderer {
         abortSignal.onabort = abortHandler;
       }
 
-      const result = await this.page!.evaluate(async (exportOptions) => {
-        // @ts-ignore
-        const createMapImage = window.createMapImage;
-        if (!createMapImage)
-          throw new Error(
-            "No createMapImage Function found. Image creation failed.",
-          );
-
-        return createMapImage(
+      const result = await this.page!.evaluate((exportOptions) => {
+        return window.createMapImage(
           exportOptions.style,
           exportOptions.viewport,
           exportOptions.options,
