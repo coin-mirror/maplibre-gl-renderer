@@ -3,11 +3,21 @@
 # Start Xvfb
 Xvfb :99 -screen 0 1024x768x24 > /dev/null 2>&1 &
 
-# Wait for Xvfb to start
+# Wait for Xvfb to start with timeout
+timeout=60
+counter=0
 until xdpyinfo -display :99 >/dev/null 2>&1; do
-    echo "Waiting for Xvfb..."
+    if [ $counter -ge $timeout ]; then
+        echo "Error: Xvfb failed to start within $timeout seconds"
+        cleanup
+        exit 1
+    fi
+
+    echo "Waiting for Xvfb... ($counter/$timeout)"
     sleep 1
+    counter=$((counter + 1))
 done
+echo "Xvfb is ready"
 
 # Function to handle cleanup on exit
 cleanup() {
@@ -18,8 +28,6 @@ cleanup() {
         echo "Stopping Xvfb..."
         pkill Xvfb
     fi
-    
-    exit 0
 }
 
 # Register the cleanup function for these signals
@@ -32,4 +40,8 @@ status=$?
 if [ $status -ne 0 ]; then
     echo "Application failed with status $status, running cleanup..."
     cleanup
+    exit 1
 fi
+
+cleanup
+exit 0
