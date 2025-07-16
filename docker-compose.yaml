@@ -18,16 +18,64 @@ services:
     cap_add:
       - SYS_ADMIN
     shm_size: "2gb" # More Shared Memory for Chromium
+    
+    # Enhanced restart and reliability settings
+    restart: unless-stopped
+    stop_grace_period: 60s
+    
+    # Resource limits for stability
     deploy:
       resources:
         limits:
-          memory: 2G
+          memory: 4G
+          cpus: '2.0'
         reservations:
-          memory: 1G
+          memory: 2G
+          cpus: '1.0'
+    
+    # Environment variables for reliability
+    environment:
+      - WORKER_COUNT=2
+      - NODE_ENV=production
+      - DEBUG_GPU=false
+      - DEBUG_BROWSER=false
+      # Memory management
+      - NODE_OPTIONS=--max-old-space-size=2048
+      # Stability settings
+      - DISPLAY=:99
+      - PUPPETEER_DISABLE_DEV_SHM_USAGE=true
+      - UV_THREADPOOL_SIZE=4
+    
+    # Enhanced health check
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
       interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 5s
-    restart: unless-stopped
+      timeout: 15s
+      retries: 5
+      start_period: 30s
+    
+    # Logging configuration
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "100m"
+        max-file: "3"
+    
+    # Volume mounts for persistence and debugging
+    volumes:
+      # Uncomment for development/debugging
+      # - ./logs:/app/logs
+      # - /tmp/.X11-unix:/tmp/.X11-unix:rw
+      - /dev/shm:/dev/shm
+    
+    # Network settings
+    networks:
+      - renderer-network
+
+# Create a custom network for better isolation
+networks:
+  renderer-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16
